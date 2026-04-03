@@ -1,72 +1,38 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify , render_template , url_for
 import jwt
 from db import get_cursor, conn
 
 app = Flask(__name__)
 
-SECRET_KEY = "123"  # weak on purpose 😈
 
 
-# ---------------- REGISTER ----------------
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
 
-    cur = get_cursor()
-
+@app.route("/")
+def index():
+    cursor = get_cursor()
     try:
-        cur.execute(
-            "INSERT INTO users (email, password, role) VALUES (%s, %s, %s)",
-            (email, password, "USER")
-        )
-        conn.commit()
-        return jsonify({"message": "User created"})
+        cursor.execute("SELECT id, email, role FROM users;")
+        all_users = cursor.fetchall() 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        print(f"Connection Error: {e}")
+        all_users = []
+    finally:
+        cursor.close()
 
+    return render_template("index.html", users=all_users)
 
-# ---------------- LOGIN ----------------
-@app.route("/login", methods=["POST"])
+@app.route("/login")
 def login():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
-
-    cur = get_cursor()
-    cur.execute("SELECT id, password FROM users WHERE email=%s", (email,))
-    user = cur.fetchone()
-
-    # ❌ user enumeration
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
-    # ❌ plain password check
-    if user[1] != password:
-        return jsonify({"error": "Wrong password"}), 401
-
-    token = jwt.encode({"user_id": user[0]}, SECRET_KEY, algorithm="HS256")
-
-    return jsonify({"token": token})
+    return render_template("login.html");
 
 
-# ---------------- PROFILE ----------------
-@app.route("/profile", methods=["GET"])
-def profile():
-    auth_header = request.headers.get("Authorization")
 
-    if not auth_header:
-        return jsonify({"error": "Missing token"}), 401
 
-    token = auth_header.split(" ")[1]
-
-    try:
-        decoded = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return jsonify({"user_id": decoded["user_id"]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 401
+@app.route("/register", methods=["GET", "POST"])
+def register():
+        
+    return render_template("register.html")
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True , port=5001)
