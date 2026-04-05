@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuthX - Edit Profile</title>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .auth-card {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 25px;
+            color: #1c1e21;
+        }
+
+        .form-group {
+            text-align: left;
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            color: #4b4f56;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        input:focus {
+            border-color: #1877f2;
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #166fe5;
+        }
+
+        .back-link {
+            display: block;
+            margin-top: 20px;
+            color: #7f8c8d;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link:hover {
+            color: #333;
+        }
+
+        .flash-message {
+            color: #e74c3c;
+            background: #fdeaea;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            border: 1px solid #e74c3c;
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="auth-card">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash-message">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <h2>Update Information</h2>
+
+    <form action="/update_profile" method="POST">
+        <input type="hidden" name="user_id" value="{{ user.id }}">
+
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" name="username" value="{{ user.username }}">
+        </div>
+
+        <div class="form-group">
+            <label>Phone</label>
+            <input type="text" name="phone" value="{{ user.phone }}">
+        </div>
+
+        <div class="form-group">
+            <label>Salary</label>
+            <input type="number" name="salary" value="{{ user.salary }}">
+        </div>
+
+        <button type="submit">Save Changes</button>
+    </form>
+
+    <a href="/" class="back-link">Cancel</a>
+
+</div>
+
+</body>
+</html>

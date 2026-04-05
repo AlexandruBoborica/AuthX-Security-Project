@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h2>Users</h2>
+
+    <table style="width:100%">
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Salary</th>
+            <th>Role</th>
+        </tr>
+
+        {% for user in users %}
+        <tr>
+            <td>{{ user[0] }}</td>
+            <td>{{ user[1] }}</td>
+            <td>{{ user[2] }}</td>
+            <td>{{ user[3] }}</td>
+            <td>{{ user[4] }}</td>
+            <td>{{ user[5] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<div class="card">
+    <h2>Tickets</h2>
+
+    {% for ticket in tickets %}
+        <div style="border:1px solid #ddd; padding:15px; margin-bottom:10px; border-radius:8px;">
+            <h3>{{ ticket[1] }}</h3>
+            <p>{{ ticket[2] | safe }}</p> <!-- 💣 XSS HERE -->
+            <small>User ID: {{ ticket[3] }}</small>
+        </div>
+    {% endfor %}
+</div>
+
+{% endblock %}
