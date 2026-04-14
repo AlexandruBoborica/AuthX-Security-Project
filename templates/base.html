@@ -65,9 +65,14 @@
 <body>
 
 <nav>
-    <a href="/">Home</a>
+    {% if 'user_id' not in session %}
+    <a href="/login">Login</a>
+    <a href="/register">Register</a>
+    <a href="/forgot_password">Forgot Password</a>
+    {% else %}
     <a href="/create_ticket">Create Ticket</a>
     <a href="/logout">Logout</a>
+    {% endif %}
 </nav>
 
 <div class="container">

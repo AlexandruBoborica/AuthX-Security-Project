@@ -8,6 +8,15 @@
         <input type="text" name="login_input" placeholder="Username or Email"><br><br>
         <input type="password" name="password" placeholder="Password"><br><br>
         <button type="submit">Login</button>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div style="color: red; background: #ffe6e6; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
+                {{ message }}
+            </div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
     </form>
 </div>
 {% endblock %}
