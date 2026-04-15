@@ -1,12 +1,45 @@
-from flask import Flask, request, session, jsonify, render_template, url_for, redirect, flash
-import jwt
-from db import get_cursor, conn
+from flask import Flask, request, session, render_template, url_for, redirect, flash
+from db import conn
 import bcrypt
+import secrets
+import os
+import time
 
+
+login_attempts = {}
+MAX_ATTEMPTS = 5
+BLOCK_TIME = 60
 
 app = Flask(__name__)
-app.secret_key = "key123"
+app.secret_key = os.urandom(24)
 
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=False  # True if using HTTPS
+)
+
+# ------------------------
+# CSRF PROTECTION
+# ------------------------
+@app.before_request
+def csrf_protect():
+    if request.method == "POST":
+        token = session.get("_csrf_token")
+        form_token = request.form.get("_csrf_token")
+        if not token or token != form_token:
+            return "CSRF attack detected", 403
+
+
+def generate_csrf_token():
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_hex(16)
+    return session["_csrf_token"]
+
+app.jinja_env.globals['csrf_token'] = generate_csrf_token
+
+# ------------------------
+# ROUTES
+# ------------------------
 
 @app.route("/")
 def index():
@@ -18,10 +51,8 @@ def admin():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-
     if session.get('role') != 'admin':
         return "Access denied", 403
-
 
     cursor = conn.cursor()
     try:
@@ -29,24 +60,18 @@ def admin():
         tickets = cursor.fetchall()
 
         cursor.execute("SELECT id, username, email, phone_number, salary, role FROM users;")
-        all_users = cursor.fetchall()
+        users = cursor.fetchall()
 
-        return render_template("admin.html", users=all_users, tickets=tickets)
-
-    except Exception as e:
-        conn.rollback()
-        return f"Error: {e}"
+        return render_template("admin.html", users=users, tickets=tickets)
     finally:
         cursor.close()
 
 
 @app.route("/edit_profile/<int:user_id>")
 def edit_profile(user_id):
-    # ❌ Not logged in
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # ❌ Trying to edit someone else
     if session['user_id'] != user_id:
         return "Unauthorized", 403
 
@@ -67,12 +92,13 @@ def edit_profile(user_id):
 
     return render_template("edit_profile.html", user=user_data)
 
+
 @app.route("/update_profile", methods=["POST"])
 def update_profile():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    user_id = session['user_id']  # 🔐 TRUST SESSION, NOT FORM
+    user_id = session['user_id']
 
     username = request.form.get("username")
     phone = request.form.get("phone")
@@ -88,11 +114,9 @@ def update_profile():
 
         conn.commit()
         flash("Update successful!", "success")
-
     except Exception as e:
         conn.rollback()
         flash(f"Error: {e}", "error")
-
     finally:
         cursor.close()
 
@@ -105,22 +129,38 @@ def login():
         login_input = request.form.get("login_input")
         password = request.form.get("password")
 
+        now = time.time()
+
+        # 🔒 Check brute-force block
+        if login_input in login_attempts:
+            attempts, last_attempt_time = login_attempts[login_input]
+
+            if attempts >= MAX_ATTEMPTS:
+                if now - last_attempt_time < BLOCK_TIME:
+                    remaining = int(BLOCK_TIME - (now - last_attempt_time))
+                    flash(f"Too many attempts. Try again in {remaining}s", "error")
+                    return redirect(url_for('login'))
+                else:
+                    # reset after block expires
+                    login_attempts[login_input] = [0, now]
+
         cursor = conn.cursor()
         try:
-            query = """
-            SELECT id, username, email, role, phone_number, salary, password
-            FROM users 
-            WHERE username = %s OR email = %s
-            """
+            cursor.execute("""
+                SELECT id, username, email, role, phone_number, salary, password
+                FROM users 
+                WHERE username = %s OR email = %s
+            """, (login_input, login_input))
 
-            cursor.execute(query, (login_input, login_input))
             user = cursor.fetchone()
 
-            # 🔐 CHECK HASH
             if user and bcrypt.checkpw(
                 password.encode('utf-8'),
                 user[6].encode('utf-8')
             ):
+                # ✅ SUCCESS → reset attempts
+                login_attempts.pop(login_input, None)
+
                 session['user_id'] = user[0]
                 session['role'] = user[3]
 
@@ -139,23 +179,20 @@ def login():
                     return render_template("profile.html", user=user_data)
 
             else:
-                flash("Invalid username/email or password.", "error")
-                return redirect(url_for('login'))
+                # ❌ FAILED LOGIN
+                if login_input not in login_attempts:
+                    login_attempts[login_input] = [1, now]
+                else:
+                    login_attempts[login_input][0] += 1
+                    login_attempts[login_input][1] = now
 
-        except Exception as e:
-            conn.rollback()
-            flash(f"Database Error: {e}", "error")
-            return redirect(url_for('login'))
+                flash("Invalid credentials", "error")
+                return redirect(url_for('login'))
 
         finally:
             cursor.close()
 
     return render_template("login.html")
-
-
-
-
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -174,14 +211,12 @@ def register():
 
         cursor = conn.cursor()
         try:
-            query = """
-            INSERT INTO users (email, username, password, role, phone_number, salary) 
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """
+            cursor.execute("""
+                INSERT INTO users (email, username, password, role, phone_number, salary) 
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (email, username, hashed_password, 'user', phone, salary))
 
-            cursor.execute(query, (email, username, hashed_password, 'user', phone, salary))
             conn.commit()
-
             return render_template("registration_success.html")
 
         except Exception as e:
@@ -195,12 +230,24 @@ def register():
     return render_template("register.html")
 
 
+# ------------------------
+# 🔐 SECURE PASSWORD RESET
+# ------------------------
+
 @app.route("/forgot_password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email")
 
-        token = email  
+        token = secrets.token_urlsafe(32)
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET reset_token=%s WHERE email=%s",
+            (token, email)
+        )
+        conn.commit()
+        cursor.close()
 
         return render_template("reset_password.html", token=token)
 
@@ -212,14 +259,20 @@ def reset_password():
     token = request.form.get("token")
     new_password = request.form.get("new_password")
 
+    hashed_password = bcrypt.hashpw(
+        new_password.encode('utf-8'),
+        bcrypt.gensalt()
+    ).decode('utf-8')
+
     cursor = conn.cursor()
     try:
-        query = """
-        UPDATE users SET password=%s WHERE email=%s
-        """
-        cursor.execute(query, (new_password, token))
-        conn.commit()
+        cursor.execute("""
+            UPDATE users 
+            SET password=%s, reset_token=NULL 
+            WHERE reset_token=%s
+        """, (hashed_password, token))
 
+        conn.commit()
         return "Password reset successful"
 
     except Exception as e:
@@ -242,14 +295,12 @@ def create_ticket():
 
         cursor = conn.cursor()
         try:
-            query = """
-            INSERT INTO tickets (title, description, created_by) 
-            VALUES (%s, %s, %s)
-            """
+            cursor.execute("""
+                INSERT INTO tickets (title, description, created_by) 
+                VALUES (%s, %s, %s)
+            """, (title, description, user))
 
-            cursor.execute(query, (title, description, user))
             conn.commit()
-
             return "Ticket created!"
 
         except Exception as e:
