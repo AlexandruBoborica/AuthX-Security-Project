@@ -1,10 +1,10 @@
 import psycopg2
 
 conn = psycopg2.connect(
-    dbname="authlab",
-    user="alex",
-    password="Ursu12345",
-    host="localhost"
+    host="localhost",
+    database="authlab",     
+    user="postgres",         
+    password="Ursu12345"    
 )
 
 def get_cursor():

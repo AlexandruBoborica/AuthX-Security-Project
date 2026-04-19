@@ -72,7 +72,7 @@ def login():
             
             cursor.execute(query)
             user = cursor.fetchone()
-            
+            print(query)
             if user:
                 
                 session['user_id'] = user[0]
