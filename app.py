@@ -15,9 +15,10 @@ app.secret_key = os.urandom(24)
 
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SECURE=False  # True if using HTTPS
+    SESSION_COOKIE_SECURE=False, #true pt HTTPS
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=1800  
 )
-
 
 @app.before_request
 def csrf_protect():
@@ -159,7 +160,7 @@ def login():
                     del login_attempts[login_input]
 
         cursor = conn.cursor()
-
+        session.permanent = True
         try:
             cursor.execute("""
                 SELECT id, username, email, role,
@@ -170,7 +171,7 @@ def login():
 
             user = cursor.fetchone()
 
-        
+            
 
             if user and bcrypt.checkpw(
                 password.encode(),
@@ -295,92 +296,72 @@ def register():
 
     return render_template("register.html")
 
+from datetime import datetime, timedelta
+
 @app.route("/forgot_password", methods=["GET", "POST"])
 def forgot_password():
-
     if request.method == "POST":
-
         email = request.form.get("email")
 
         token = secrets.token_urlsafe(32)
+        expiration = datetime.utcnow() + timedelta(minutes=15)
 
         cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE users 
+            SET reset_token=%s, reset_token_expiration=%s 
+            WHERE email=%s
+        """, (token, expiration, email))
+        conn.commit()
+        cursor.close()
 
-        try:
-            cursor.execute(
-                """
-                UPDATE users
-                SET reset_token=%s
-                WHERE email=%s
-                """,
-                (token, email)
-            )
-
-            conn.commit()
-
-            flash(
-                "If the account exists, a reset link has been sent.",
-                "success"
-            )
-
-            return redirect(url_for("login"))
-
-        finally:
-            cursor.close()
+        return render_template("reset_password.html", token=token)
 
     return render_template("forgot_password.html")
 
+from datetime import datetime
 
-@app.route("/reset_password/<token>", methods=["GET","POST"])
-def reset_password(token):
+@app.route("/reset_password", methods=["POST"])
+def reset_password():
+    token = request.form.get("token")
+    new_password = request.form.get("new_password")
 
-    if request.method == "POST":
+    hashed_password = bcrypt.hashpw(
+        new_password.encode('utf-8'),
+        bcrypt.gensalt()
+    ).decode('utf-8')
 
-        new_password = request.form.get(
-            "new_password"
-        )
-
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT reset_token_expiration 
+            FROM users 
+            WHERE reset_token=%s
+        """, (token,))
         
- 
+        result = cursor.fetchone()
 
-        hashed_password = bcrypt.hashpw(
-            new_password.encode(),
-            bcrypt.gensalt()
-        ).decode()
+        if not result:
+            return "Invalid token", 400
 
-        cursor = conn.cursor()
+        if result[0] < datetime.utcnow():
+            return "Token expired", 400
 
-        try:
+        cursor.execute("""
+            UPDATE users 
+            SET password=%s, reset_token=NULL, reset_token_expiration=NULL 
+            WHERE reset_token=%s
+        """, (hashed_password, token))
 
-            cursor.execute("""
-                UPDATE users
-                SET password=%s,
-                    reset_token=NULL
-                WHERE reset_token=%s
-            """,
+        conn.commit()
+        return "Password reset successful"
 
-            (
-                hashed_password,
-                token
-            ))
+    except Exception as e:
+        conn.rollback()
+        return f"Error: {e}"
 
-            conn.commit()
-
-            flash(
-                "Password reset successful.",
-                "success"
-            )
-
-            return redirect(
-                url_for("login")
-            )
-
-        finally:
-            cursor.close()
-
-    return render_template(
-        "reset_password.html"
-    )
+    finally:
+        cursor.close()
 
 @app.route("/create_ticket", methods=["GET", "POST"])
 def create_ticket():
