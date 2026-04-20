@@ -5,7 +5,9 @@
     <h2>Create Ticket</h2>
 
     <form method="POST">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden"
+        name="_csrf_token"
+        value="{{ csrf_token() }}">
         <input type="text" name="title" placeholder="Title"><br><br>
         <textarea name="description" placeholder="Describe issue..." rows="5"></textarea><br><br>
         <button type="submit">Submit Ticket</button>

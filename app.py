@@ -3,7 +3,7 @@ from db import conn
 import bcrypt
 import secrets
 import os
-import time
+import time,re
 
 
 login_attempts = {}
@@ -18,9 +18,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=False  # True if using HTTPS
 )
 
-# ------------------------
-# CSRF PROTECTION
-# ------------------------
+
 @app.before_request
 def csrf_protect():
     if request.method == "POST":
@@ -37,9 +35,7 @@ def generate_csrf_token():
 
 app.jinja_env.globals['csrf_token'] = generate_csrf_token
 
-# ------------------------
-# ROUTES
-# ------------------------
+
 
 @app.route("/")
 def index():
@@ -95,6 +91,7 @@ def edit_profile(user_id):
 
 @app.route("/update_profile", methods=["POST"])
 def update_profile():
+
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
@@ -102,30 +99,36 @@ def update_profile():
 
     username = request.form.get("username")
     phone = request.form.get("phone")
-    salary = request.form.get("salary")
 
     cursor = conn.cursor()
+
     try:
         cursor.execute("""
-            UPDATE users 
-            SET username=%s, phone_number=%s, salary=%s 
+            UPDATE users
+            SET username=%s,
+                phone_number=%s
             WHERE id=%s
-        """, (username, phone, salary, user_id))
+        """, (username, phone, user_id))
 
         conn.commit()
-        flash("Update successful!", "success")
+
+        flash("Profile updated", "success")
+
     except Exception as e:
         conn.rollback()
-        flash(f"Error: {e}", "error")
+        flash(str(e), "error")
+
     finally:
         cursor.close()
 
-    return redirect(url_for('index'))
+    return redirect(url_for("index"))
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+
     if request.method == "POST":
+
         login_input = request.form.get("login_input")
         password = request.form.get("password")
 
@@ -133,32 +136,48 @@ def login():
 
 
         if login_input in login_attempts:
-            attempts, last_attempt_time = login_attempts[login_input]
+
+            attempts, last_attempt = login_attempts[login_input]
 
             if attempts >= MAX_ATTEMPTS:
-                if now - last_attempt_time < BLOCK_TIME:
-                    remaining = int(BLOCK_TIME - (now - last_attempt_time))
-                    flash(f"Too many attempts. Try again in {remaining}s", "error")
-                    return redirect(url_for('login'))
-                else:
 
-                    login_attempts[login_input] = [0, now]
+                if now - last_attempt < BLOCK_TIME:
+
+                    remaining = int(
+                        BLOCK_TIME - (now - last_attempt)
+                    )
+
+                    flash(
+                        f"Too many failed attempts. Wait {remaining} seconds.",
+                        "error"
+                    )
+
+                    return redirect(url_for("login"))
+
+                else:
+                
+                    del login_attempts[login_input]
 
         cursor = conn.cursor()
+
         try:
             cursor.execute("""
-                SELECT id, username, email, role, phone_number, salary, password
-                FROM users 
-                WHERE username = %s OR email = %s
+                SELECT id, username, email, role,
+                       phone_number, salary, password
+                FROM users
+                WHERE username=%s OR email=%s
             """, (login_input, login_input))
 
             user = cursor.fetchone()
 
+        
+
             if user and bcrypt.checkpw(
-                password.encode('utf-8'),
-                user[6].encode('utf-8')
+                password.encode(),
+                user[6].encode()
             ):
-  
+
+             
                 login_attempts.pop(login_input, None)
 
                 session['user_id'] = user[0]
@@ -173,21 +192,26 @@ def login():
                     "salary": user[5]
                 }
 
-                if user_data['role'] == 'admin':
-                    return redirect(url_for('admin'))
-                else:
-                    return render_template("profile.html", user=user_data)
+                if user_data["role"] == "admin":
+                    return redirect(url_for("admin"))
 
+                return render_template(
+                    "profile.html",
+                    user=user_data
+                )
+
+          
             else:
-  
+
                 if login_input not in login_attempts:
                     login_attempts[login_input] = [1, now]
+
                 else:
                     login_attempts[login_input][0] += 1
                     login_attempts[login_input][1] = now
 
                 flash("Invalid credentials", "error")
-                return redirect(url_for('login'))
+                return redirect(url_for("login"))
 
         finally:
             cursor.close()
@@ -196,92 +220,167 @@ def login():
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
+
     if request.method == "POST":
+
         email = request.form.get("email")
         username = request.form.get("username")
         password = request.form.get("password")
         phone = request.form.get("phone")
+
         salary = 50000
 
-        # 🔐 HASH PASSWORD
+        
+
+        if len(password) < 12:
+            flash("Password must be at least 12 characters")
+            return redirect(url_for("register"))
+
+        if not re.search(r"\d", password):
+            flash("Password must contain at least 1 number")
+            return redirect(url_for("register"))
+
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            flash("Password must contain at least 1 special character")
+            return redirect(url_for("register"))
+
+    
         hashed_password = bcrypt.hashpw(
-            password.encode('utf-8'),
+            password.encode(),
             bcrypt.gensalt()
-        ).decode('utf-8')
+        ).decode()
 
         cursor = conn.cursor()
+
         try:
+
             cursor.execute("""
-                INSERT INTO users (email, username, password, role, phone_number, salary) 
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (email, username, hashed_password, 'user', phone, salary))
+                INSERT INTO users
+                (email, username, password,
+                 role, phone_number, salary)
+
+                VALUES (%s,%s,%s,%s,%s,%s)
+            """,
+
+            (
+                email,
+                username,
+                hashed_password,
+                "user",
+                phone,
+                salary
+            ))
 
             conn.commit()
-            return render_template("registration_success.html")
+
+            return render_template(
+                "registration_success.html"
+            )
 
         except Exception as e:
+
             conn.rollback()
-            flash(f"Registration Error: {e}", "error")
-            return redirect(url_for('register'))
+
+            flash(
+                f"Registration Error: {e}",
+                "error"
+            )
+
+            return redirect(
+                url_for("register")
+            )
 
         finally:
             cursor.close()
 
     return render_template("register.html")
 
-
-# ------------------------
-# 🔐 SECURE PASSWORD RESET
-# ------------------------
-
 @app.route("/forgot_password", methods=["GET", "POST"])
 def forgot_password():
+
     if request.method == "POST":
+
         email = request.form.get("email")
 
         token = secrets.token_urlsafe(32)
 
         cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE users SET reset_token=%s WHERE email=%s",
-            (token, email)
-        )
-        conn.commit()
-        cursor.close()
 
-        return render_template("reset_password.html", token=token)
+        try:
+            cursor.execute(
+                """
+                UPDATE users
+                SET reset_token=%s
+                WHERE email=%s
+                """,
+                (token, email)
+            )
+
+            conn.commit()
+
+            flash(
+                "If the account exists, a reset link has been sent.",
+                "success"
+            )
+
+            return redirect(url_for("login"))
+
+        finally:
+            cursor.close()
 
     return render_template("forgot_password.html")
 
 
-@app.route("/reset_password", methods=["POST"])
-def reset_password():
-    token = request.form.get("token")
-    new_password = request.form.get("new_password")
+@app.route("/reset_password/<token>", methods=["GET","POST"])
+def reset_password(token):
 
-    hashed_password = bcrypt.hashpw(
-        new_password.encode('utf-8'),
-        bcrypt.gensalt()
-    ).decode('utf-8')
+    if request.method == "POST":
 
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            UPDATE users 
-            SET password=%s, reset_token=NULL 
-            WHERE reset_token=%s
-        """, (hashed_password, token))
+        new_password = request.form.get(
+            "new_password"
+        )
 
-        conn.commit()
-        return "Password reset successful"
+        
+ 
 
-    except Exception as e:
-        conn.rollback()
-        return f"Error: {e}"
+        hashed_password = bcrypt.hashpw(
+            new_password.encode(),
+            bcrypt.gensalt()
+        ).decode()
 
-    finally:
-        cursor.close()
+        cursor = conn.cursor()
 
+        try:
+
+            cursor.execute("""
+                UPDATE users
+                SET password=%s,
+                    reset_token=NULL
+                WHERE reset_token=%s
+            """,
+
+            (
+                hashed_password,
+                token
+            ))
+
+            conn.commit()
+
+            flash(
+                "Password reset successful.",
+                "success"
+            )
+
+            return redirect(
+                url_for("login")
+            )
+
+        finally:
+            cursor.close()
+
+    return render_template(
+        "reset_password.html"
+    )
 
 @app.route("/create_ticket", methods=["GET", "POST"])
 def create_ticket():

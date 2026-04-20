@@ -117,6 +117,9 @@
     <h2>Update Information</h2>
 
     <form action="/update_profile" method="POST">
+        <input type="hidden"
+        name="_csrf_token"
+        value="{{ csrf_token() }}">
         <input type="hidden" name="user_id" value="{{ user.id }}">
 
         <div class="form-group">
@@ -129,10 +132,6 @@
             <input type="text" name="phone" value="{{ user.phone }}">
         </div>
 
-        <div class="form-group">
-            <label>Salary</label>
-            <input type="number" name="salary" value="{{ user.salary }}">
-        </div>
 
         <button type="submit">Save Changes</button>
     </form>

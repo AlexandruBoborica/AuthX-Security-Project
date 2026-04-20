@@ -1,29 +1,105 @@
 {% extends "base.html" %}
 
 {% block content %}
+
 <div class="card">
+
     <h2>Register</h2>
 
+
+ 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+
+        <div style="
+            color:red;
+            background:#ffe6e6;
+            padding:12px;
+            margin-bottom:15px;
+            border-radius:5px;
+        ">
+            {{ message }}
+        </div>
+
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+
     <form method="POST">
-        <input type="hidden"
-               name="_csrf_token"
-               value="{{ csrf_token() }}">
-    
-        <input type="email" name="email" placeholder="Email"><br><br>
-    
-        <input type="text"
-               name="username"
-               placeholder="Username"><br><br>
-    
-        <input type="text"
-               name="phone"
-               placeholder="Phone"><br><br>
-    
-        <input type="password"
-               name="password"
-               placeholder="Password"><br><br>
-    
-        <button type="submit">Register</button>
+
+        <!-- CSRF token -->
+        <input
+            type="hidden"
+            name="_csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+
+        <input
+            type="email"
+            name="email"
+            placeholder="Email"
+            required
+            autocomplete="email"
+        >
+
+        <br><br>
+
+
+        <input
+            type="text"
+            name="username"
+            placeholder="Username"
+            required
+            autocomplete="username"
+        >
+
+        <br><br>
+
+
+        <input
+            type="text"
+            name="phone"
+            placeholder="Phone"
+            required
+        >
+
+        <br><br>
+
+
+        <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            required
+            autocomplete="new-password"
+        >
+
+        <br><br>
+
+
+        <!-- Password policy shown to user -->
+        <small>
+            Password must contain:
+            <br>
+            • At least 12 characters
+            <br>
+            • At least 1 number
+            <br>
+            • At least 1 special character
+        </small>
+
+        <br><br>
+
+
+        <button type="submit">
+            Register
+        </button>
+
     </form>
+
 </div>
+
 {% endblock %}
