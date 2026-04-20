@@ -34,7 +34,7 @@
     {% for ticket in tickets %}
         <div style="border:1px solid #ddd; padding:15px; margin-bottom:10px; border-radius:8px;">
             <h3>{{ ticket[1] }}</h3>
-            <p>{{ ticket[2] | safe }}</p> <!-- 💣 XSS HERE -->
+            <p>{{ ticket[2] }}</p>
             <small>User ID: {{ ticket[3] }}</small>
         </div>
     {% endfor %}

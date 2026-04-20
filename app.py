@@ -131,7 +131,7 @@ def login():
 
         now = time.time()
 
-        # 🔒 Check brute-force block
+
         if login_input in login_attempts:
             attempts, last_attempt_time = login_attempts[login_input]
 
@@ -141,7 +141,7 @@ def login():
                     flash(f"Too many attempts. Try again in {remaining}s", "error")
                     return redirect(url_for('login'))
                 else:
-                    # reset after block expires
+
                     login_attempts[login_input] = [0, now]
 
         cursor = conn.cursor()
@@ -158,7 +158,7 @@ def login():
                 password.encode('utf-8'),
                 user[6].encode('utf-8')
             ):
-                # ✅ SUCCESS → reset attempts
+  
                 login_attempts.pop(login_input, None)
 
                 session['user_id'] = user[0]
@@ -179,7 +179,7 @@ def login():
                     return render_template("profile.html", user=user_data)
 
             else:
-                # ❌ FAILED LOGIN
+  
                 if login_input not in login_attempts:
                     login_attempts[login_input] = [1, now]
                 else:
